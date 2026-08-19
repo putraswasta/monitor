@@ -1,3 +1,22 @@
+<script>
+    // Password rahasia untuk membuka halaman Admin
+    const passwordAdmin = "putra.jaya.swasta; // Ganti dengan password pilihan Kakak
+    
+    let aksesDiberikan = false;
+    
+    // Munculkan kotak dialog password saat halaman dibuka
+    let inputPassword = prompt("Masukkan Password Admin:");
+    
+    if (inputPassword === passwordAdmin) {
+        aksesDiberikan = true;
+        alert("Login Berhasil! Selamat datang, Admin.");
+    } else {
+        alert("Password Salah! Akses Ditolak.");
+        // Redirect atau tutup halaman jika salah
+        document.body.innerHTML = "<h2 style='color:white; text-align:center; margin-top:20vh;'>AKSES DITOLAK. SILAHKAN KEMBALI.</h2>";
+    }
+</script>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
