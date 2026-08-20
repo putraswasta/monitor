@@ -1,1 +1,292 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sistem Paralel Multi-BMS</title><link rel="stylesheet" href="style.css"></head><body><header><div class="brand">▣ SISTEM PARALEL MULTI-BMS</div><div id="server">● Server Terputus</div></header><main><div id="grid"></div><div id="empty">Menunggu data PACK dari MQTT...</div></main><div id="modal" class="modal hidden"><div class="card detail"><div class="head"><b><span id="dot">●</span> Detail: <em id="title">PACK-01</em></b><button id="close">×</button></div><div class="body"><div class="stats" id="summaryTop"></div><h3>🌡 SENSOR SUHU</h3><div class="stats" id="temps"></div><h3>🔋 TEGANGAN TIAP CELL</h3><div id="cells" class="cells"></div><h3>📈 LIVE TREND VOLTAGE</h3><canvas id="chart" height="230"></canvas><div class="box" id="summary"></div></div></div></div><script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="id">
+
+<head>
+    <meta charset="utf-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width,initial-scale=1,viewport-fit=cover"
+    >
+
+    <title>Sistem Paralel Multi-BMS</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+</head>
+
+<body>
+
+<header>
+
+    <div class="brand">
+        ▣ SISTEM PARALEL MULTI-BMS
+    </div>
+
+    <div
+        id="serverStatus"
+        class="server"
+    >
+        ● Server Terputus
+    </div>
+
+</header>
+
+<main>
+
+    <section
+        id="grid"
+        class="grid"
+    ></section>
+
+    <div
+        id="empty"
+        class="empty"
+    >
+        Menunggu data BMS...
+    </div>
+
+</main>
+
+<div
+    id="modal"
+    class="modal hidden"
+>
+
+    <div class="modal-card">
+
+        <div class="modal-head">
+
+            <div>
+
+                <span
+                    id="detailDot"
+                    class="dot"
+                ></span>
+
+                Detail:
+
+                <b id="detailTitle">
+                    PACK-01
+                </b>
+
+            </div>
+
+            <button
+                id="closeModal"
+                class="close"
+            >
+                ×
+            </button>
+
+        </div>
+
+        <div class="modal-body">
+
+            <div class="stats four">
+
+                <div>
+                    <small>
+                        SOH
+                    </small>
+
+                    <strong id="dSoh">
+                        -
+                    </strong>
+                </div>
+
+                <div>
+                    <small>
+                        Sisa Kapasitas
+                    </small>
+
+                    <strong id="dRemain">
+                        -
+                    </strong>
+                </div>
+
+                <div>
+                    <small>
+                        Kapasitas Nominal
+                    </small>
+
+                    <strong id="dNominal">
+                        -
+                    </strong>
+                </div>
+
+                <div>
+                    <small>
+                        Cycle Count
+                    </small>
+
+                    <strong id="dCycles">
+                        -
+                    </strong>
+                </div>
+
+            </div>
+
+            <h3>
+                🌡 SENSOR SUHU
+            </h3>
+
+            <div class="stats four">
+
+                <div>
+                    <small>
+                        Sensor 1
+                    </small>
+
+                    <strong id="t0">
+                        -
+                    </strong>
+                </div>
+
+                <div>
+                    <small>
+                        Sensor 2
+                    </small>
+
+                    <strong id="t1">
+                        -
+                    </strong>
+                </div>
+
+                <div>
+                    <small>
+                        Sensor 3
+                    </small>
+
+                    <strong id="t2">
+                        -
+                    </strong>
+                </div>
+
+                <div>
+                    <small>
+                        Sensor 4
+                    </small>
+
+                    <strong id="t3">
+                        -
+                    </strong>
+                </div>
+
+            </div>
+
+            <h3>
+                🔋 TEGANGAN TIAP CELL
+            </h3>
+
+            <div
+                id="cells"
+                class="cells"
+            ></div>
+
+            <h3>
+                📈 LIVE TREND VOLTAGE
+            </h3>
+
+            <canvas
+                id="chart"
+                width="900"
+                height="250"
+            ></canvas>
+
+            <div class="summary">
+
+                <h3>
+                    RINGKASAN SISTEM
+                </h3>
+
+                <div>
+                    <span>
+                        Total Voltage
+                    </span>
+
+                    <b id="dVoltage">
+                        -
+                    </b>
+                </div>
+
+                <div>
+                    <span>
+                        Arus
+                    </span>
+
+                    <b id="dCurrent">
+                        -
+                    </b>
+                </div>
+
+                <div>
+                    <span>
+                        Daya
+                    </span>
+
+                    <b id="dPower">
+                        -
+                    </b>
+                </div>
+
+                <div>
+                    <span>
+                        Delta Cell
+                    </span>
+
+                    <b id="dDelta">
+                        -
+                    </b>
+                </div>
+
+                <div>
+                    <span>
+                        Min Cell
+                    </span>
+
+                    <b id="dMin">
+                        -
+                    </b>
+                </div>
+
+                <div>
+                    <span>
+                        Max Cell
+                    </span>
+
+                    <b id="dMax">
+                        -
+                    </b>
+                </div>
+
+                <div>
+                    <span>
+                        Alarm
+                    </span>
+
+                    <b id="dAlarm">
+                        -
+                    </b>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script
+    src="https://unpkg.com/mqtt/dist/mqtt.min.js"
+></script>
+
+<script
+    src="app.js"
+></script>
+
+</body>
+</html>
