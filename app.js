@@ -1,10 +1,31 @@
-const CONFIG={host:"419f80bf9fe7493f984ad0a01e48ffd5.s1.eu.hivemq.cloud",wsPort:8884,path:"/mqtt",username:"putra.jaya.swasta_SUBSCRIBE",password:"putra.jaya.swasta",prefix:"bms"};
-const packs={};let selected=null;const $=id=>document.getElementById(id),num=(v,n=2)=>Number.isFinite(Number(v))?Number(v).toFixed(n):"-";
-function setServer(on){$("server").className=on?"on":"";$("server").textContent=on?"● Server Terhubung":"● Server Terputus"}
-function pack(id){return packs[id]||(packs[id]={id,online:false,data:{},cells:[],temps:[],history:[]})}
-function render(){let ids=Object.keys(packs).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));$("empty").style.display=ids.length?"none":"block";let g=document.createElement("div");g.className="grid";ids.forEach(id=>{let p=packs[id],d=p.data,c=p.cells,min=c.length?Math.min(...c):null,max=c.length?Math.max(...c):null,s=Number(d.soc);let el=document.createElement("article");el.className="pack";el.onclick=()=>openPack(id);el.innerHTML=`<div class="head"><b>${id}</b><span class="dot ${p.online?'online':''}">●</span></div><div class="soc"><div class="head"><small>SOC</small><b>${Number.isFinite(s)?num(s,0)+'%':'-'}</b></div><div class="bar"><i style="width:${Math.max(0,Math.min(100,s||0))}%"></i></div></div><div class="metrics"><div><small>⚡ Voltage</small><b class="y">${num(d.total_voltage)} V</b></div><div><small>↻ Current</small><b class="b">${num(d.current)} A</b></div><div><small>🔵 Diff Cell</small><b class="b">${min==null?'-':num((max-min)*1000,0)+' mV'}</b></div><div><small>⚡ Power</small><b class="r">${d.current==null||d.total_voltage==null?'-':num(d.current*d.total_voltage,1)+' W'}</b></div><div><small>🔴 Min Cell</small><b class="r">${min==null?'-':num(min,3)+' V'}</b></div><div><small>🟢 Max Cell</small><b class="g">${max==null?'-':num(max,3)+' V'}</b></div></div>`;g.appendChild(el)});$("grid").replaceWith(g);g.id="grid"}
-function openPack(id){selected=id;let p=packs[id],d=p.data,c=p.cells,t=p.temps,min=c.length?Math.min(...c):null,max=c.length?Math.max(...c):null;$("title").textContent=id;$("dot").className=p.online?"online":"";$("summaryTop").innerHTML=[['SOH',d.soh==null?'-':num(d.soh,0)+' %'],['Sisa Kapasitas',d.remaining_capacity==null?'-':num(d.remaining_capacity)+' Ah'],['Kapasitas Nominal',d.nominal_capacity==null?'-':num(d.nominal_capacity)+' Ah'],['Cycle Count',d.cycles??'-']].map(x=>`<div><small>${x[0]}</small><strong>${x[1]}</strong></div>`).join('');$("temps").innerHTML=[0,1,2,3].map(i=>`<div><small>Sensor ${i+1}</small><strong>${t[i]==null?'-':num(t[i],1)+' °C'}</strong></div>`).join('');$("cells").innerHTML=c.length?c.map((v,i)=>`<div class="cell ${v===min?'min':v===max?'max':''}"><small>C-${i+1}</small><b>${num(v,3)} V</b></div>`).join(''):'Belum ada data cell';$("summary").innerHTML=`<div class="row"><span>Total Voltage</span><b>${num(d.total_voltage)} V</b></div><div class="row"><span>Arus (Current)</span><b>${num(d.current)} A</b></div><div class="row"><span>Daya (Power)</span><b>${d.current==null||d.total_voltage==null?'-':num(d.current*d.total_voltage,1)+' W'}</b></div><div class="row"><span>Delta Sel</span><b>${min==null?'-':num((max-min)*1000,0)+' mV'}</b></div><div class="row"><span>Min Cell</span><b>${min==null?'-':num(min,3)+' V'}</b></div><div class="row"><span>Max Cell</span><b>${max==null?'-':num(max,3)+' V'}</b></div><div class="row"><span>Alarm</span><b class="${d.alarm?'r':'g'}">${d.alarm?'ALARM':'NORMAL'}</b></div>`;$("modal").classList.remove('hidden');draw(p.history)}
-function draw(a){let c=$("chart"),x=c.getContext('2d'),w=c.width=c.clientWidth*2,h=c.height=460;x.clearRect(0,0,w,h);x.strokeStyle='#29313d';for(let i=0;i<6;i++){let y=30+i*(h-60)/5;x.beginPath();x.moveTo(45,y);x.lineTo(w-20,y);x.stroke()}if(!a.length)return;let mn=Math.min(...a),mx=Math.max(...a),rg=Math.max(.01,mx-mn);x.strokeStyle='#facc15';x.lineWidth=3;x.beginPath();a.forEach((v,i)=>{let px=45+i*(w-65)/Math.max(1,a.length-1),py=25+(mx-v)/rg*(h-55);i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()}
-function msg(topic,payload){let z=topic.split('/'),id=z.find(v=>/^PACK-/i.test(v));if(!id)return;id=id.toUpperCase();let p=pack(id),kind=z[z.indexOf(id)+1],o;try{o=JSON.parse(payload)}catch{ o=payload.toString()}if(kind==='status')p.online=String(o).toLowerCase()==='online';else if(kind==='data'){p.data=o;p.online=true;if(Number.isFinite(Number(o.total_voltage))){p.history.push(Number(o.total_voltage));if(p.history.length>60)p.history.shift()}}else if(kind==='cells')p.cells=Array.isArray(o)?o:(o.cells||[]);else if(kind==='temperature')p.temps=Array.isArray(o)?o:(o.temperatures||[]);render();if(selected===id&&!$("modal").classList.contains('hidden'))openPack(id)}
-$("close").onclick=()=>{$("modal").classList.add('hidden');selected=null};$("modal").onclick=e=>{if(e.target===$("modal"))$("close").click()};
-const client=mqtt.connect(`wss://${CONFIG.host}:${CONFIG.wsPort}${CONFIG.path}`,{username:CONFIG.username,password:CONFIG.password,reconnectPeriod:5000,connectTimeout:10000});client.on('connect',()=>{setServer(true);client.subscribe(`${CONFIG.prefix}/+/+`)});client.on('offline',()=>setServer(false));client.on('reconnect',()=>setServer(false));client.on('error',()=>setServer(false));client.on('message',(t,m)=>msg(t,m));render();
+const PACK_TIMEOUT = 10000; // 10 detik
+
+const packs = {};
+
+function updatePack(packId, data) {
+    packs[packId] = {
+        ...data,
+        lastSeen: Date.now()
+    };
+
+    renderPacks();
+}
+
+function removeOfflinePacks() {
+    const now = Date.now();
+    let changed = false;
+
+    Object.keys(packs).forEach(packId => {
+        if (now - packs[packId].lastSeen > PACK_TIMEOUT) {
+            delete packs[packId];
+            changed = true;
+            console.log(`[OFFLINE] ${packId} dihapus dari dashboard`);
+        }
+    });
+
+    if (changed) {
+        renderPacks();
+    }
+}
+
+setInterval(removeOfflinePacks, 1000);
