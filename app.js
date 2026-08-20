@@ -1,4 +1,4 @@
-const CONFIG={host:"419f80bf9fe7493f984ad0a01e48ffd5.s1.eu.hivemq.cloud",wsPort:8884,path:"/mqtt",username:"PUT_SUBSCRIBE_ONLY_USERNAME_HERE",password:"PUT_SUBSCRIBE_ONLY_PASSWORD_HERE",prefix:"bms"};
+const CONFIG={host:"419f80bf9fe7493f984ad0a01e48ffd5.s1.eu.hivemq.cloud",wsPort:8884,path:"/mqtt",username:"putra.jaya.swasta_SUBSCRIBE",password:"putra.jaya.swasta",prefix:"bms"};
 const packs={};let selected=null;const $=id=>document.getElementById(id),num=(v,n=2)=>Number.isFinite(Number(v))?Number(v).toFixed(n):"-";
 function setServer(on){$("server").className=on?"on":"";$("server").textContent=on?"● Server Terhubung":"● Server Terputus"}
 function pack(id){return packs[id]||(packs[id]={id,online:false,data:{},cells:[],temps:[],history:[]})}
