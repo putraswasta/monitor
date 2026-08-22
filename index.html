@@ -432,7 +432,7 @@
 
     <div class="empty" id="empty">
       <h2>Menunggu data BMS</h2>
-      <p><br/></p>
+      <p>ESP harus online MQTT.<br/>Filter 2 alat: ?id=ESP_satu,ESP_dua</p>
     </div>
   </div>
 
@@ -488,7 +488,7 @@ const CONFIG = {
   username: "putra.jaya.swasta_SUBSCRIBE",
   password: "putra.jaya.swasta"
 };
-const PACK_TIMEOUT = 4000; // 4 detik tanpa data → hilang dari dashboard
+const PACK_TIMEOUT = 7000; // 6–8 dtk tanpa data → hilang
 const $ = id => document.getElementById(id);
 const fmt = (v, d = 2) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : "—";
 
@@ -745,15 +745,24 @@ function handleMessage(topic, message) {
     return;
   }
   const d = ensureDev(dev);
-  if (obj && obj.session && d.session && obj.session !== d.session) return;
+  // Data pack boleh datang dulu (jangan nunggu heartbeat master)
+  if (obj && obj.session) {
+    if (d.session && obj.session !== d.session) d.packs = {};
+    d.session = obj.session;
+    d.online = true;
+  }
   if (type === "status") {
     const st = (obj && obj.status) ? obj.status : payload;
     if (String(st).toLowerCase() === "offline") { delete d.packs[kind]; scheduleRender(); return; }
   }
+  if (type !== "data" && type !== "cells" && type !== "temperature" && type !== "status") return;
+  if (type === "data" && !obj) return;
   const p = ensurePack(dev, kind);
   p.lastSeen = Date.now();
   if (type === "data" && obj) {
     p.data = obj;
+    if (Array.isArray(obj.cells)) p.cells = obj.cells.map(Number);
+    if (Array.isArray(obj.temperatures)) p.temps = obj.temperatures.map(Number);
     const v = Number(obj.total_voltage);
     if (Number.isFinite(v)) { p.history.push(v); if (p.history.length > 40) p.history.shift(); }
   } else if (type === "cells" && obj && Array.isArray(obj.cells)) {
@@ -768,7 +777,7 @@ function connect() {
   const url = `wss://${CONFIG.host}:${CONFIG.wsPort}${CONFIG.path}`;
   const client = mqtt.connect(url, {
     username: CONFIG.username, password: CONFIG.password,
-    clean: true, reconnectPeriod: 4000, connectTimeout: 10000
+    clean: true, reconnectPeriod: 2000, connectTimeout: 8000
   });
   client.on("connect", () => { setServer(true); client.subscribe("bms/#"); });
   client.on("reconnect", () => setServer(false));
