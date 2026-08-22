@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d10" />
+  <title>BMS Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #12151b;
+      --card: #171b22;
+      --card2: #1c212b;
+      --line: #2a303c;
+      --text: #eef2f7;
+      --muted: #8b95a7;
+      --faint: #5c6678;
+      --green: #22c55e;
+      --green2: #16a34a;
+      --teal: #2dd4bf;
+      --blue: #3b82f6;
+      --amber: #f59e0b;
+      --orange: #fb923c;
+      --red: #ef4444;
+      --radius: 18px;
+      --font: "IBM Plex Sans", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --ease: cubic-bezier(.22,1,.36,1);
+      --gap: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; min-height: 100%;
+      background: var(--bg); color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select { font-family: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--green); outline-offset: 2px;
+    }
+
+    .app {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 14px 14px 48px;
+      padding-left: max(14px, env(safe-area-inset-left));
+      padding-right: max(14px, env(safe-area-inset-right));
+    }
+
+    .nav {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+    .logo {
+      width: 38px; height: 38px; border-radius: 11px;
+      background: linear-gradient(145deg, #163528, #0e1f18);
+      border: 1px solid #2a5a45;
+      display: grid; place-items: center;
+    }
+    .logo svg { width: 20px; height: 20px; }
+    .brand h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+    .brand span { display: block; font-size: 10px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; margin-top: 2px; }
+    .nav-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .field, .btn, .pill {
+      height: 38px; border-radius: 11px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      padding: 0 12px; font-size: 12px;
+    }
+    input.field { width: min(220px, 48vw); font-family: var(--mono); font-size: 12px; }
+    select.field { max-width: 140px; }
+    .btn {
+      background: var(--green); color: #052e16; border-color: transparent; font-weight: 600;
+    }
+    .btn:active { transform: scale(.98); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      border-radius: 999px; color: var(--muted);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+    .dot.on { background: var(--green); box-shadow: 0 0 0 4px rgba(34,197,94,.15); }
+    .hint { margin: 0 0 14px; font-size: 11px; color: var(--faint); word-break: break-all; min-height: 14px; }
+
+    /* Top: Pack Status (ex Pack Online) + SOC + Daya */
+    .top {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--gap);
+      margin-bottom: 16px;
+    }
+    @media (min-width: 720px) {
+      .top { grid-template-columns: 1.1fr 1fr 1fr; }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .panel-h {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 8px; margin-bottom: 12px;
+    }
+    .panel-h h2 {
+      margin: 0; font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      color: var(--muted);
+    }
+    .panel-h h2 svg { width: 15px; height: 15px; color: var(--green); }
+    .chip {
+      font-size: 11px; color: var(--muted);
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 4px 10px; background: var(--card2);
+    }
+
+    /* Pack Status donut — di slot Pack Online */
+    .status-panel { display: flex; flex-direction: column; }
+    .status-body {
+      display: flex; align-items: center; justify-content: center;
+      gap: 18px; flex-wrap: wrap; padding: 4px 0 2px;
+      flex: 1;
+    }
+    .donut-box {
+      width: 120px; height: 120px; position: relative; flex-shrink: 0;
+    }
+    .donut-center {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      pointer-events: none; text-align: center;
+    }
+    .donut-center strong {
+      display: block; font-family: var(--mono); font-size: 24px; font-weight: 600;
+      letter-spacing: -.03em;
+    }
+    .donut-center span { font-size: 10px; color: var(--muted); }
+    .legend {
+      display: flex; flex-direction: column; gap: 8px;
+      font-size: 12px; color: var(--muted);
+    }
+    @media (max-width: 719px) {
+      .legend { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px 14px; }
+    }
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .legend b {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* SOC & Daya KPI */
+    .kpi {
+      display: flex; flex-direction: column; justify-content: space-between;
+      min-height: 140px;
+    }
+    .kpi-top {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px; gap: 8px;
+    }
+    .kpi-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--muted);
+    }
+    .kpi-ico {
+      width: 30px; height: 30px; border-radius: 9px;
+      display: grid; place-items: center;
+      background: var(--card2); border: 1px solid var(--line);
+    }
+    .kpi-ico svg { width: 14px; height: 14px; }
+    .kpi-delta {
+      font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 999px;
+    }
+    .kpi-delta.up { background: rgba(34,197,94,.12); color: var(--green); }
+    .kpi-num {
+      font-family: var(--mono); font-size: 36px; font-weight: 600;
+      letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums;
+    }
+    .kpi-sub { margin-top: 10px; font-size: 12px; color: var(--faint); }
+
+    /* Pack list */
+    .list-panel { margin-bottom: 8px; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table.packs {
+      width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px;
+    }
+    table.packs th {
+      text-align: left; font-size: 11px; color: var(--faint);
+      font-weight: 500; letter-spacing: .05em; text-transform: uppercase;
+      padding: 8px 12px 12px; border-bottom: 1px solid var(--line);
+    }
+    table.packs td {
+      padding: 14px 12px; border-bottom: 1px solid rgba(42,48,60,.55);
+      vertical-align: middle;
+    }
+    table.packs tbody tr { cursor: pointer; transition: background 140ms var(--ease); }
+    table.packs tbody tr:hover { background: rgba(255,255,255,.025); }
+    table.packs tbody tr:active { background: rgba(34,197,94,.06); }
+    .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .name-cell { display: flex; flex-direction: column; gap: 3px; }
+    .name-cell strong { font-size: 13px; font-weight: 600; }
+    .name-cell small { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+    .badge {
+      display: inline-flex; align-items: center;
+      font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px;
+    }
+    .badge.ok { background: rgba(34,197,94,.12); color: var(--green); }
+    .badge.bad { background: rgba(239,68,68,.14); color: var(--red); }
+    .badge.chg { background: rgba(59,130,246,.14); color: #60a5fa; }
+    .badge.dsg { background: rgba(245,158,11,.14); color: var(--amber); }
+    .badge.idle { background: rgba(139,149,167,.12); color: var(--muted); }
+    .soc-mini { display: flex; align-items: center; gap: 10px; }
+    .soc-mini .track {
+      width: 56px; height: 6px; border-radius: 99px; background: #243038; overflow: hidden;
+    }
+    .soc-mini .track > i {
+      display: block; height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, var(--green2), var(--green));
+    }
+    .row-hint {
+      margin-top: 12px; font-size: 12px; color: var(--faint);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .row-hint svg { width: 14px; height: 14px; }
+
+    /* Modal detail */
+    .modal {
+      position: fixed; inset: 0; z-index: 50; display: none;
+      background: rgba(4, 8, 12, 0.72);
+      align-items: flex-end; justify-content: center;
+    }
+    .modal.open { display: flex; }
+    .sheet {
+      width: min(720px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--green);
+      border-radius: 22px 22px 0 0;
+      padding: 20px 16px 32px;
+    }
+    @media (min-width: 720px) {
+      .modal { align-items: center; padding: 24px; }
+      .sheet { border-radius: 20px; padding: 24px; }
+    }
+    .sheet-h {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 12px; margin-bottom: 18px;
+    }
+    .sheet-h h2 { margin: 0; font-size: 18px; font-weight: 700; }
+    .sheet-h .sub { margin-top: 4px; font-size: 12px; color: var(--faint); font-family: var(--mono); }
+    .xbtn {
+      width: 40px; height: 40px; border-radius: 12px;
+      border: 1px solid var(--line); background: var(--card);
+      color: var(--text); font-size: 20px; line-height: 1; flex-shrink: 0;
+    }
+    .metrics {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
+    }
+    @media (min-width: 560px) { .metrics { grid-template-columns: repeat(4, 1fr); } }
+    .metric {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 14px; padding: 12px;
+    }
+    .metric small { display: block; color: var(--faint); font-size: 11px; margin-bottom: 5px; }
+    .metric b { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+    .c-v { color: var(--teal); }
+    .c-i { color: #60a5fa; }
+    .c-p { color: var(--amber); }
+    .c-g { color: var(--green); }
+    .c-r { color: var(--red); }
+    .sec { margin-bottom: 16px; }
+    .sec h3 {
+      margin: 0 0 10px; font-size: 11px; font-weight: 600;
+      color: var(--muted); letter-spacing: .06em; text-transform: uppercase;
+    }
+    .cells-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    @media (min-width: 480px) { .cells-grid { grid-template-columns: repeat(5, 1fr); } }
+    .cell {
+      background: var(--card); border-radius: 10px; padding: 10px 6px;
+      text-align: center; border-bottom: 3px solid #2d463c;
+    }
+    .cell em { display: block; font-style: normal; font-size: 10px; color: var(--faint); margin-bottom: 2px; }
+    .cell b { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+    .cell.mn { border-bottom-color: var(--green); }
+    .cell.mn b { color: var(--green); }
+    .cell.mx { border-bottom-color: var(--red); }
+    .cell.mx b { color: var(--red); }
+    .cell.nom { border-bottom-color: var(--orange); }
+    .cell.nom b { color: var(--orange); }
+    .temps { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (min-width: 480px) { .temps { grid-template-columns: repeat(4, 1fr); } }
+    .cell-legend {
+      display: flex; flex-wrap: wrap; gap: 10px 14px;
+      margin-top: 10px; font-size: 11px; color: var(--muted);
+    }
+    .cell-legend i {
+      display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px;
+    }
+    .chart-box { height: 150px; position: relative; }
+    .chart-box canvas { width: 100% !important; height: 100% !important; }
+
+    .empty {
+      margin-top: 20px; padding: 48px 18px; text-align: center;
+      border: 1px dashed var(--line); border-radius: var(--radius);
+      background: var(--panel); color: var(--muted);
+    }
+    .empty h2 { margin: 0 0 8px; color: var(--text); font-size: 16px; }
+    .empty p { margin: 0; font-size: 13px; line-height: 1.5; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="nav">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="3" width="12" height="18" rx="2.5"/>
+            <path d="M10 3V1.8a.8.8 0 0 1 .8-.8h2.4a.8.8 0 0 1 .8.8V3"/>
+            <path d="M12 8l-2.2 4.2h2.7L11.2 16.5"/>
+          </svg>
+        </div>
+        <div>
+          <h1>BMS Monitor</h1>
+          <span>Energy Control</span>
+        </div>
+      </div>
+      <div class="nav-tools">
+        <select id="deviceSel" class="field"><option value="">Semua alat</option></select>
+        <input id="deviceIn" class="field" placeholder="ESP_aaa, ESP_bbb" spellcheck="false" />
+        <button class="btn" id="btnGo" type="button">Terapkan</button>
+        <div class="pill"><i id="serverDot" class="dot"></i><span id="serverText">Menghubungkan</span></div>
+      </div>
+    </header>
+
+    <p class="hint" id="linkHint"></p>
+
+    <div id="dash" class="hidden">
+      <!-- Pack Status di posisi Pack Online + SOC + Daya -->
+      <section class="top">
+        <div class="panel status-panel">
+          <div class="panel-h">
+            <h2>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+              Pack Status
+            </h2>
+            <span class="chip">Live</span>
+          </div>
+          <div class="status-body">
+            <div class="donut-box">
+              <canvas id="chartDonut"></canvas>
+              <div class="donut-center">
+                <div>
+                  <strong id="donutCenter">—</strong>
+                  <span>pack total</span>
+                </div>
+              </div>
+            </div>
+            <div class="legend" id="donutLegend"></div>
+          </div>
+        </div>
+
+        <article class="panel kpi">
+          <div class="kpi-top">
+            <div class="kpi-title">
+              <div class="kpi-ico" style="color:var(--green)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3h10v18H7z"/><path d="M10 1h4"/></svg>
+              </div>
+              SOC Rata-rata
+            </div>
+            <span class="kpi-delta up">%</span>
+          </div>
+          <div class="kpi-num" id="kSoc">—</div>
+          <div class="kpi-sub">state of charge</div>
+        </article>
+
+        <article class="panel kpi">
+          <div class="kpi-top">
+            <div class="kpi-title">
+              <div class="kpi-ico" style="color:var(--amber)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4 14h7l-1 8 10-14h-7l1-6z"/></svg>
+              </div>
+              Daya Total
+            </div>
+            <span class="kpi-delta up">W</span>
+          </div>
+          <div class="kpi-num" id="kPower">—</div>
+          <div class="kpi-sub">charge / discharge</div>
+        </article>
+      </section>
+
+      <section class="panel list-panel">
+        <div class="panel-h">
+          <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            Pack Unit List
+          </h2>
+          <span class="chip" id="listCount">0 unit</span>
+        </div>
+        <div class="table-wrap">
+          <table class="packs">
+            <thead>
+              <tr>
+                <th>Pack</th>
+                <th>SOC</th>
+                <th>Volt</th>
+                <th>Arus</th>
+                <th>Mode</th>
+                <th>Alarm</th>
+              </tr>
+            </thead>
+            <tbody id="packRows"></tbody>
+          </table>
+        </div>
+        <p class="row-hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>
+          Ketuk baris pack untuk buka detail lengkap
+        </p>
+      </section>
+    </div>
+
+    <div class="empty" id="empty">
+      <h2>Menunggu data BMS</h2>
+      <p>ESP harus online MQTT.<br/>Filter 2 alat: ?id=ESP_satu,ESP_dua</p>
+    </div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-h">
+        <div>
+          <h2 id="detailTitle">PACK</h2>
+          <div class="sub" id="detailSub">—</div>
+        </div>
+        <button class="xbtn" id="closeModal" type="button" aria-label="Tutup">×</button>
+      </div>
+      <div class="metrics">
+        <div class="metric"><small>Tegangan</small><b id="dVoltage" class="c-v">—</b></div>
+        <div class="metric"><small>Arus</small><b id="dCurrent" class="c-i">—</b></div>
+        <div class="metric"><small>Daya</small><b id="dPower" class="c-p">—</b></div>
+        <div class="metric"><small>SOH</small><b id="dSoh" class="c-g">—</b></div>
+        <div class="metric"><small>Sisa / Nominal</small><b id="dCap">—</b></div>
+        <div class="metric"><small>Siklus</small><b id="dCycles">—</b></div>
+        <div class="metric"><small>Delta sel</small><b id="dDelta">—</b></div>
+        <div class="metric"><small>Alarm</small><b id="dAlarm">—</b></div>
+      </div>
+      <div class="sec">
+        <h3>Tegangan sel</h3>
+        <div class="cells-grid" id="cells"></div>
+        <div class="cell-legend">
+          <span><i style="background:var(--green)"></i>Terendah</span>
+          <span><i style="background:var(--red)"></i>Tertinggi</span>
+          <span><i style="background:var(--orange)"></i>~3.20 V</span>
+        </div>
+      </div>
+      <div class="sec">
+        <h3>Suhu sensor</h3>
+        <div class="temps">
+          <div class="metric"><small>Sensor 1</small><b id="t0">—</b></div>
+          <div class="metric"><small>Sensor 2</small><b id="t1">—</b></div>
+          <div class="metric"><small>Sensor 3</small><b id="t2">—</b></div>
+          <div class="metric"><small>Sensor 4</small><b id="t3">—</b></div>
+        </div>
+      </div>
+      <div class="sec">
+        <h3>Tren tegangan</h3>
+        <div class="chart-box"><canvas id="chartDetail"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const CONFIG = {
+  host: "419f80bf9fe7493f984ad0a01e48ffd5.s1.eu.hivemq.cloud",
+  wsPort: 8884,
+  path: "/mqtt",
+  username: "putra.jaya.swasta_SUBSCRIBE",
+  password: "putra.jaya.swasta"
+};
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : "—";
+
+const devices = {};
+let filterIds = (new URLSearchParams(location.search).get("id") || "")
+  .split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+let selected = null;
+let chartDonut = null, chartDetail = null;
+let raf = 0;
+
+function filterKey() { return filterIds.join(","); }
+function allowed(dev) { return filterIds.length === 0 || filterIds.includes(dev); }
+function setServer(on) {
+  $("serverDot").classList.toggle("on", on);
+  $("serverText").textContent = on ? "Terhubung" : "Terputus";
+}
+function ensureDev(id) {
+  if (!devices[id]) devices[id] = { session: null, online: false, packs: {} };
+  return devices[id];
+}
+function ensurePack(dev, pack) {
+  const d = ensureDev(dev);
+  if (!d.packs[pack]) d.packs[pack] = { data: {}, cells: [], temps: [], history: [], lastSeen: 0 };
+  return d.packs[pack];
+}
+function cellClass(v, minC, maxC) {
+  if (minC !== maxC) {
+    if (v === maxC) return "mx";
+    if (v === minC) return "mn";
+  }
+  if (Math.abs(v - 3.2) <= 0.05) return "nom";
+  return "";
+}
+function stateOf(d, curr) {
+  if (d.state === "CHG" || d.state === "DSG" || d.state === "IDLE") return d.state;
+  if (curr > 0.3) return "CHG";
+  if (curr < -0.3) return "DSG";
+  return "IDLE";
+}
+function visiblePacks() {
+  const rows = [];
+  Object.keys(devices).sort().forEach(dev => {
+    if (!allowed(dev)) return;
+    const d = devices[dev];
+    if (!d.online) return;
+    Object.keys(d.packs).sort().forEach(pack => rows.push({ dev, pack, p: d.packs[pack] }));
+  });
+  return rows;
+}
+function refreshSelect() {
+  const sel = $("deviceSel");
+  const cur = filterKey();
+  sel.innerHTML = `<option value="">Semua alat</option>` +
+    Object.keys(devices).sort().map(id => `<option value="${id}">${id}</option>`).join("");
+  sel.value = filterIds.length === 1 ? filterIds[0] : "";
+  $("deviceIn").value = cur;
+  $("linkHint").textContent = cur
+    ? "Tautan pelanggan: " + location.origin + location.pathname + "?id=" + cur
+    : "";
+}
+function scheduleRender() {
+  if (raf) return;
+  raf = requestAnimationFrame(() => { raf = 0; render(); });
+}
+
+function render() {
+  const rows = visiblePacks();
+  $("empty").classList.toggle("hidden", rows.length > 0);
+  $("dash").classList.toggle("hidden", rows.length === 0);
+  if (!rows.length) { refreshSelect(); return; }
+
+  let socSum = 0, pwr = 0, n = 0;
+  let chg = 0, dsg = 0, idle = 0, alarms = 0;
+  rows.forEach(({ p }) => {
+    const d = p.data || {};
+    const v = +d.total_voltage, c = +d.current;
+    if (Number.isFinite(+d.soc)) { socSum += +d.soc; n++; }
+    if (Number.isFinite(v) && Number.isFinite(c)) pwr += v * c;
+    if (d.alarm) alarms++;
+    const st = stateOf(d, c);
+    if (st === "CHG") chg++;
+    else if (st === "DSG") dsg++;
+    else idle++;
+  });
+  $("kSoc").textContent = n ? (socSum / n).toFixed(0) : "—";
+  $("kPower").textContent = rows.length ? pwr.toFixed(0) : "—";
+  $("listCount").textContent = rows.length + " unit";
+  $("donutCenter").textContent = rows.length;
+
+  $("packRows").innerHTML = rows.map(({ dev, pack, p }) => {
+    const d = p.data || {};
+    const soc = Number(d.soc) || 0;
+    const volt = +d.total_voltage;
+    const curr = +d.current;
+    const alarm = !!d.alarm;
+    const st = stateOf(d, curr);
+    return `<tr data-dev="${dev}" data-pack="${pack}">
+      <td><div class="name-cell"><strong>${pack}</strong><small>${dev}</small></div></td>
+      <td>
+        <div class="soc-mini">
+          <span class="mono">${soc.toFixed(0)}%</span>
+          <span class="track"><i style="width:${Math.min(100, soc)}%"></i></span>
+        </div>
+      </td>
+      <td class="mono" style="color:var(--teal)">${fmt(volt)} V</td>
+      <td class="mono" style="color:#60a5fa">${fmt(curr)} A</td>
+      <td><span class="badge ${st.toLowerCase()}">${st}</span></td>
+      <td><span class="badge ${alarm ? "bad" : "ok"}">${alarm ? "Alarm" : "Normal"}</span></td>
+    </tr>`;
+  }).join("");
+  $("packRows").querySelectorAll("tr").forEach(tr => {
+    tr.onclick = () => openDetail(tr.dataset.dev, tr.dataset.pack);
+  });
+
+  updateDonut(chg, dsg, idle, alarms);
+  if (selected && $("modal").classList.contains("open")) updateDetail();
+  refreshSelect();
+}
+
+function openDetail(dev, pack) {
+  selected = { dev, pack };
+  $("modal").classList.add("open");
+  updateDetail();
+}
+function closeDetail() {
+  $("modal").classList.remove("open");
+}
+function updateDetail() {
+  if (!selected) return;
+  const p = devices[selected.dev]?.packs[selected.pack];
+  if (!p) return;
+  const d = p.data || {}, cells = p.cells || [], temps = p.temps || [];
+  $("detailTitle").textContent = selected.pack;
+  $("detailSub").textContent = selected.dev;
+  const volt = +d.total_voltage, curr = +d.current;
+  $("dVoltage").textContent = fmt(volt) + " V";
+  $("dCurrent").textContent = fmt(curr) + " A";
+  $("dPower").textContent = Number.isFinite(volt) && Number.isFinite(curr) ? fmt(volt * curr, 1) + " W" : "—";
+  $("dSoh").textContent = d.soh != null ? d.soh + " %" : "—";
+  $("dCap").textContent = (d.remaining_capacity != null ? fmt(d.remaining_capacity, 1) : "—") +
+    " / " + (d.nominal_capacity != null ? fmt(d.nominal_capacity, 1) : "—") + " Ah";
+  $("dCycles").textContent = d.cycles != null ? d.cycles : "—";
+  $("dAlarm").textContent = d.alarm ? "AKTIF" : "Normal";
+  $("dAlarm").className = d.alarm ? "c-r" : "c-g";
+  for (let i = 0; i < 4; i++) $("t" + i).textContent = temps[i] != null ? fmt(temps[i], 1) + " °C" : "—";
+  if (cells.length) {
+    const minC = Math.min(...cells), maxC = Math.max(...cells);
+    $("cells").innerHTML = cells.map((v, i) =>
+      `<div class="cell ${cellClass(v, minC, maxC)}"><em>C${i + 1}</em><b>${fmt(v, 3)}</b></div>`
+    ).join("");
+    $("dDelta").textContent = fmt((maxC - minC) * 1000, 0) + " mV";
+  } else {
+    $("cells").innerHTML = "";
+    $("dDelta").textContent = "—";
+  }
+  const labels = p.history.map((_, i) => i);
+  const data = p.history;
+  if (chartDetail) {
+    chartDetail.data.labels = labels;
+    chartDetail.data.datasets[0].data = data;
+    chartDetail.update("none");
+  } else {
+    chartDetail = new Chart($("chartDetail"), {
+      type: "line",
+      data: { labels, datasets: [{ data, borderColor: "#22c55e", backgroundColor: "rgba(34,197,94,.08)", borderWidth: 2, tension: .35, pointRadius: 0, fill: true }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: {
+            ticks: { color: "#5c6678", font: { size: 10, family: "IBM Plex Mono" } },
+            grid: { color: "rgba(42,48,60,.8)" },
+            border: { display: false }
+          }
+        }
+      }
+    });
+  }
+}
+
+function updateDonut(chg, dsg, idle, alarms) {
+  const donutData = [chg, dsg, idle, alarms];
+  const donutColors = ["#3b82f6", "#f59e0b", "#64748b", "#ef4444"];
+  const donutLabels = ["Charge", "Discharge", "Idle", "Alarm"];
+  $("donutLegend").innerHTML = donutLabels.map((l, i) =>
+    `<span><b style="background:${donutColors[i]}"></b>${l} ${donutData[i]}</span>`
+  ).join("");
+  if (chartDonut) {
+    chartDonut.data.datasets[0].data = donutData;
+    chartDonut.update("none");
+  } else {
+    chartDonut = new Chart($("chartDonut"), {
+      type: "doughnut",
+      data: {
+        labels: donutLabels,
+        datasets: [{ data: donutData, backgroundColor: donutColors, borderWidth: 0, hoverOffset: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true, cutout: "72%",
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+}
+
+$("closeModal").onclick = closeDetail;
+$("modal").onclick = e => { if (e.target === $("modal")) closeDetail(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
+
+function applyFilter(id) {
+  filterIds = (id || "").split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+  const u = new URL(location.href);
+  const cur = filterKey();
+  if (cur) u.searchParams.set("id", cur); else u.searchParams.delete("id");
+  history.replaceState(null, "", u);
+  selected = null;
+  closeDetail();
+  render();
+}
+$("deviceSel").onchange = e => applyFilter(e.target.value);
+$("btnGo").onclick = () => applyFilter($("deviceIn").value);
+$("deviceIn").addEventListener("keydown", e => { if (e.key === "Enter") applyFilter($("deviceIn").value); });
+if (filterIds.length) $("deviceIn").value = filterKey();
+
+function handleMessage(topic, message) {
+  const parts = topic.split("/");
+  if (parts[0] !== "bms" || parts.length < 3) return;
+  let dev, kind, type;
+  if (parts[2] === "master") { dev = parts[1]; kind = "master"; type = parts[3] || "status"; }
+  else if (/^PACK-/i.test(parts[2])) { dev = parts[1]; kind = parts[2].toUpperCase(); type = parts[3] || ""; }
+  else return;
+  const payload = message.toString();
+  let obj = null;
+  try { obj = JSON.parse(payload); } catch (_) {}
+  if (kind === "master") {
+    const d = ensureDev(dev);
+    if (obj && obj.status === "offline") { d.online = false; d.packs = {}; scheduleRender(); return; }
+    if (obj && obj.status === "online") {
+      if (obj.session && d.session && obj.session !== d.session) d.packs = {};
+      d.session = obj.session || d.session;
+      d.online = true;
+      scheduleRender();
+    }
+    return;
+  }
+  const d = ensureDev(dev);
+  if (obj && obj.session && d.session && obj.session !== d.session) return;
+  if (type === "status") {
+    const st = (obj && obj.status) ? obj.status : payload;
+    if (String(st).toLowerCase() === "offline") { delete d.packs[kind]; scheduleRender(); return; }
+  }
+  const p = ensurePack(dev, kind);
+  p.lastSeen = Date.now();
+  if (type === "data" && obj) {
+    p.data = obj;
+    const v = Number(obj.total_voltage);
+    if (Number.isFinite(v)) { p.history.push(v); if (p.history.length > 40) p.history.shift(); }
+  } else if (type === "cells" && obj && Array.isArray(obj.cells)) {
+    p.cells = obj.cells.map(Number);
+  } else if (type === "temperature" && obj && Array.isArray(obj.temperatures)) {
+    p.temps = obj.temperatures.map(Number);
+  }
+  scheduleRender();
+}
+
+function connect() {
+  const url = `wss://${CONFIG.host}:${CONFIG.wsPort}${CONFIG.path}`;
+  const client = mqtt.connect(url, {
+    username: CONFIG.username, password: CONFIG.password,
+    clean: true, reconnectPeriod: 4000, connectTimeout: 10000
+  });
+  client.on("connect", () => { setServer(true); client.subscribe("bms/#"); });
+  client.on("reconnect", () => setServer(false));
+  client.on("offline", () => setServer(false));
+  client.on("message", handleMessage);
+}
+connect();
+setInterval(scheduleRender, 5000);
+</script>
+</body>
+</html>
